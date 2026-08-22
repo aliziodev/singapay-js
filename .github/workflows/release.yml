@@ -37,6 +37,12 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
+      # The npm bundled with Node 22 predates OIDC Trusted Publishing, which
+      # needs npm >= 11.5. Without this the workflow falls back to NODE_AUTH_TOKEN
+      # silently, so a repo that thinks it is tokenless would still depend on a
+      # secret. Same step the sibling `next-sanctum` release uses.
+      - run: npm install -g npm@latest
+
       - name: Has this version already been published?
         id: check
         run: |
@@ -71,9 +77,23 @@ jobs:
       - run: pnpm build
         if: steps.check.outputs.publish == 'true'
 
+      # Authenticates by EITHER route, whichever is configured:
+      #
+      #   A) Trusted Publishing (OIDC) — no secret at all. Configure at
+      #      npmjs.com -> the package -> Settings -> Trusted Publisher ->
+      #      GitHub Actions, repo `aliziodev/singapay-js`, workflow
+      #      `release.yml`. Needs the `id-token: write` above and npm >= 11.5.
+      #      Preferred: nothing to store, nothing to expire, nothing to leak.
+      #
+      #   B) An Automation token in the `NPM_TOKEN` secret. Needed for the
+      #      FIRST publish, because a Trusted Publisher is configured on a
+      #      package page and the package does not exist yet.
+      #
+      # `--provenance` is explicit rather than left to `.npmrc`, so the intent
+      # survives someone editing that file.
       - name: Publish to npm
         if: steps.check.outputs.publish == 'true'
-        run: npm publish --access public
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
