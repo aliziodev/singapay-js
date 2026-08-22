@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SingaPay, SingaPayResponse } from '../../src/index.js';
+import { ApiError } from '../../src/index.js';
 import { connectionThatCan, field, hasCredentials, reference } from './setup.js';
 
 /**
@@ -19,11 +20,18 @@ describe.skipIf(!hasCredentials)('sub-accounts', () => {
   let singapay!: SingaPay;
   const created: string[] = [];
 
-  /** Create, and register for cleanup before anything can throw. */
-  async function createAccount(type: string): Promise<SingaPayResponse> {
+  /**
+   * Create, and register for cleanup before anything can throw.
+   *
+   * The field is `account_type`, not `type`. A wrong name is **silently
+   * ignored** — the account is created with no type at all and every
+   * type-specific behaviour disappears, so assertions written against `type`
+   * pass while proving nothing.
+   */
+  async function createAccount(accountType: string): Promise<SingaPayResponse> {
     const response = await singapay.accounts.create({
-      name: `${NAME_PREFIX} ${reference(type.slice(0, 3))}`,
-      type,
+      name: `${NAME_PREFIX} ${reference(accountType.slice(0, 3))}`,
+      account_type: accountType,
     });
     const id = field(response, 'id');
 
@@ -56,6 +64,7 @@ describe.skipIf(!hasCredentials)('sub-accounts', () => {
     const id = field(account, 'id') as string;
 
     // `owned` needs no KYB, so it is usable immediately.
+    expect(field(account, 'account_type')).toBe('owned');
     expect(field(account, 'status')).toBe('active');
 
     await expect(singapay.accounts.find(id)).resolves.toMatchObject({ successful: true });
@@ -75,24 +84,23 @@ describe.skipIf(!hasCredentials)('sub-accounts', () => {
     await expect(singapay.accounts.delete(id)).resolves.toMatchObject({ successful: true });
   });
 
-  it('creates a business-managed account', async () => {
+  it('creates a business-managed account inactive, pending KYB', async () => {
+    // Unlike `owned`, this one is not usable on creation: it waits on a KYB
+    // review and carries an onboarding URL for the customer to complete.
     const account = await createAccount('business_managed');
 
     expect(account.successful).toBe(true);
-
-    // CHANGED since 2026-08-21, when this same call returned `inactive` with
-    // `kyb_status: kyb_in_review` and a `kyb_onboarding_url`. As of
-    // 2026-08-23 it comes back `active` with both KYB fields null — no review
-    // gate at all. Pinned so that a swing back is noticed rather than assumed.
-    expect(field(account, 'status')).toBe('active');
+    expect(field(account, 'account_type')).toBe('business_managed');
+    expect(field(account, 'status')).toBe('inactive');
+    expect(field(account, 'kyb_status')).toBe('kyb_in_review');
+    expect(field(account, 'kyb_onboarding_url')).toBeTypeOf('string');
   });
 
-  it('accepts the "partner" type', async () => {
-    // Also CHANGED: refused 422 on 2026-08-21, accepted on 2026-08-23. The
-    // type is in SingaPay's published enum, so acceptance is the reading that
-    // matches their spec — but do not treat either behaviour as settled.
-    const account = await createAccount('partner');
-
-    expect(account.successful).toBe(true);
+  it('refuses the "partner" type the spec enum advertises', async () => {
+    // Listed in SingaPay's own `Account` schema enum, refused by the create
+    // endpoint. Do not offer it.
+    await expect(
+      singapay.accounts.create({ name: `${NAME_PREFIX} ptr`, account_type: 'partner' }),
+    ).rejects.toBeInstanceOf(ApiError);
   });
 });
