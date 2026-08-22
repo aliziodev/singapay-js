@@ -85,17 +85,21 @@ jobs:
       #      `release.yml`. Needs the `id-token: write` above and npm >= 11.5.
       #      Preferred: nothing to store, nothing to expire, nothing to leak.
       #
-      #   B) An Automation token in the `NPM_TOKEN` secret. Needed for the
-      #      FIRST publish, because a Trusted Publisher is configured on a
-      #      package page and the package does not exist yet.
+      # Authenticated by OIDC Trusted Publishing, configured on the package at
+      # npmjs.com against this repo and this workflow filename. There is
+      # deliberately no `NODE_AUTH_TOKEN` here: `setup-node` writes
+      # `_authToken=$NODE_AUTH_TOKEN` into .npmrc, so leaving the variable in
+      # place after the token was revoked would hand npm an EMPTY credential
+      # instead of falling through to OIDC.
+      #
+      # If OIDC ever stops working this fails loudly, which is the point — a
+      # silent fallback to a token someone believes they revoked is worse.
       #
       # `--provenance` is explicit rather than left to `.npmrc`, so the intent
       # survives someone editing that file.
       - name: Publish to npm
         if: steps.check.outputs.publish == 'true'
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Tagged only after the registry accepted it, so a tag never points at a
       # release that failed halfway.
