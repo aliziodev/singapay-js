@@ -3,7 +3,7 @@
 [![Tests](https://github.com/aliziodev/singapay-js/actions/workflows/tests.yml/badge.svg)](https://github.com/aliziodev/singapay-js/actions/workflows/tests.yml)
 [![npm](https://img.shields.io/npm/v/@aliziodev/singapay)](https://www.npmjs.com/package/@aliziodev/singapay)
 [![downloads](https://img.shields.io/npm/dm/@aliziodev/singapay)](https://www.npmjs.com/package/@aliziodev/singapay)
-[![license](https://img.shields.io/npm/l/@aliziodev/singapay)](LICENSE)
+[![license](https://img.shields.io/github/license/aliziodev/singapay-js)](LICENSE)
 
 SDK **tidak resmi** untuk payment gateway [SingaPay](https://singapay.id) (PT Abadi Singapay Indonesia, PJP1 berizin Bank Indonesia). Repo ini tidak berafiliasi dengan PT Abadi Singapay Indonesia.
 
