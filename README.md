@@ -564,6 +564,10 @@ pnpm lint         # biome
 pnpm build        # tsdown
 ```
 
+Paket ini **berjalan** di Node 20+, tapi **membangunnya** butuh Node 22+ — tsdown memakai `Promise.withResolvers`, yang baru ada di Node 22. CI memisahkan keduanya: test dijalankan di Node 20, 22, dan 24, sementara build dilakukan sekali lalu hasilnya dimuat ulang di Node 20 untuk membuktikan klaim `engines`.
+
+Ada juga `pnpm test:e2e` yang memanggil sandbox SingaPay sungguhan. Suite itu skip sendiri tanpa kredensial dan tidak pernah dijalankan CI — lihat `.env.example`.
+
 ## Lisensi
 
 MIT © Alizio

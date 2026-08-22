@@ -34,4 +34,61 @@ jobs:
 
       - run: pnpm test
 
+  # Building is a separate job because the toolchain and the output have
+  # different floors: tsdown needs `Promise.withResolvers`, so it requires
+  # Node 22+, while the package it emits targets Node 20. Running `pnpm build`
+  # inside the matrix conflated the two and failed on Node 20 for a reason
+  # that says nothing about whether the package works there.
+  build:
+    runs-on: ubuntu-latest
+    name: Build, and load the output on the oldest supported Node
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       - run: pnpm build
+
+      # `engines` claims Node 20. Prove it against the built artefact rather
+      # than assuming it, on the exact runtime that claim is about.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: ESM build loads on Node 20
+        run: |
+          node --input-type=module -e "
+            const m = await import('./dist/index.mjs');
+            if (typeof m.SingaPay !== 'function') throw new Error('SingaPay missing from ESM build');
+            if (typeof m.verifyWebhook !== 'function') throw new Error('verifyWebhook missing from ESM build');
+            console.log('ESM ok on ' + process.version);
+          "
+
+      - name: CommonJS build loads on Node 20
+        run: |
+          node -e "
+            const m = require('./dist/index.cjs');
+            if (typeof m.SingaPay !== 'function') throw new Error('SingaPay missing from CJS build');
+            if (typeof m.verifyWebhook !== 'function') throw new Error('verifyWebhook missing from CJS build');
+            console.log('CJS ok on ' + process.version);
+          "
+
+      - name: Browser guard refuses to load
+        run: |
+          node --input-type=module -e "
+            try {
+              await import('./dist/browser-guard.mjs');
+            } catch (error) {
+              console.log('browser guard threw as designed: ' + error.constructor.name);
+              process.exit(0);
+            }
+            throw new Error('browser guard did not throw');
+          "
