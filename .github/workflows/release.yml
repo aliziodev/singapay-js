@@ -1,23 +1,30 @@
 name: Release
 
-# Publishing is deliberately driven by a tag rather than by a push to main:
-# a release should be a decision someone makes, not a side effect of merging.
+# Releasing is driven by the version in package.json, not by a tag you have to
+# remember to push: bump it, merge to main, and this publishes and tags. The
+# version bump IS the release decision, and it lives in the commit that made it.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
 
+concurrency:
+  # Two pushes in quick succession must not race each other to the registry.
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
 
     permissions:
-      # Required for npm provenance — it is what lets npm attest that this
-      # tarball was built from this commit, in this workflow, and not on
-      # someone's laptop. `.npmrc` sets `provenance=true`, so a publish
-      # without this permission fails rather than silently dropping it.
+      # Required for npm provenance: it is what lets npm attest this tarball
+      # was built from this commit in this workflow, rather than on someone's
+      # laptop. `.npmrc` sets `provenance=true`, so publishing without this
+      # fails loudly instead of silently dropping the attestation.
       id-token: write
-      contents: read
+      # To push the version tag after a successful publish.
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -30,25 +37,52 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
-      - run: pnpm install --frozen-lockfile
-
-      # The same gates CI runs. A tag must not be able to publish something
-      # that would have failed on a pull request.
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-
-      - name: Refuse to publish a tag that disagrees with package.json
+      - name: Has this version already been published?
+        id: check
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "tag v$tag does not match package.json $pkg" >&2
-            exit 1
-          fi
-        if: github.event_name == 'push'
+          version="$(node -p "require('./package.json').version")"
+          name="$(node -p "require('./package.json').name")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - run: npm publish --access public
+          # `npm view` fails both when the version is missing and when the
+          # package does not exist at all, which is exactly the first release.
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "  $name@$version is already on npm; nothing to do"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "  $name@$version is not on npm; releasing"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - run: pnpm install --frozen-lockfile
+        if: steps.check.outputs.publish == 'true'
+
+      # The same gates every pull request faces. A release must never ship
+      # something that would have been rejected on the way in.
+      - run: pnpm lint
+        if: steps.check.outputs.publish == 'true'
+
+      - run: pnpm typecheck
+        if: steps.check.outputs.publish == 'true'
+
+      - run: pnpm test
+        if: steps.check.outputs.publish == 'true'
+
+      - run: pnpm build
+        if: steps.check.outputs.publish == 'true'
+
+      - name: Publish to npm
+        if: steps.check.outputs.publish == 'true'
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Tagged only after the registry accepted it, so a tag never points at a
+      # release that failed halfway.
+      - name: Tag the released commit
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.check.outputs.version }}"
+          git push origin "v${{ steps.check.outputs.version }}"
