@@ -1,0 +1,54 @@
+name: Release
+
+# Publishing is deliberately driven by a tag rather than by a push to main:
+# a release should be a decision someone makes, not a side effect of merging.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Required for npm provenance — it is what lets npm attest that this
+      # tarball was built from this commit, in this workflow, and not on
+      # someone's laptop. `.npmrc` sets `provenance=true`, so a publish
+      # without this permission fails rather than silently dropping it.
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # The same gates CI runs. A tag must not be able to publish something
+      # that would have failed on a pull request.
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Refuse to publish a tag that disagrees with package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag v$tag does not match package.json $pkg" >&2
+            exit 1
+          fi
+        if: github.event_name == 'push'
+
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,4 @@
+# The signature vectors are a checked-in test oracle. Keep their bytes exactly
+# as written rather than letting line-ending conversion rewrite them.
+* text=auto eol=lf
+test/fixtures/*.json -text
