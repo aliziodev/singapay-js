@@ -38,9 +38,9 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       # The npm bundled with Node 22 predates OIDC Trusted Publishing, which
-      # needs npm >= 11.5. Without this the workflow falls back to NODE_AUTH_TOKEN
-      # silently, so a repo that thinks it is tokenless would still depend on a
-      # secret. Same step the sibling `next-sanctum` release uses.
+      # needs npm >= 11.5. Publishing is now OIDC-only, so without this the
+      # release simply cannot authenticate. Same step the sibling
+      # `next-sanctum` release uses.
       - run: npm install -g npm@latest
 
       - name: Has this version already been published?
