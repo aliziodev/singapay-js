@@ -90,13 +90,27 @@ describe.skipIf(!hasCredentials)('money-in', () => {
       expect(Array.isArray(methods)).toBe(true);
       expect((methods as unknown[]).length).toBeGreaterThan(0);
 
-      const groups = new Set(
-        (methods as { group?: string }[]).map((method) => method.group ?? 'unknown'),
-      );
+      const rows = methods as { code?: unknown; group?: string }[];
+      const groups = new Set(rows.map((method) => method.group ?? 'unknown'));
 
       // Recorded in sandbox 2026-08-21: card, ewallet, offline_store, qris, va.
       expect(groups).toContain('va');
       expect(groups).toContain('qris');
+
+      // `code` is the field `whitelisted_payment_method` consumes, so its name
+      // and type matter more than anything else on the row. Pinned after a
+      // 2026-08-23 pull returned 20 rows shaped
+      // `{ code, name, group, desc }`. The catalogue itself stays unpinned —
+      // it is per-merchant and grows — but every row must carry a usable code.
+      for (const row of rows) {
+        expect(typeof row.code).toBe('string');
+        expect(row.code).not.toBe('');
+      }
+
+      const codes = new Set(rows.map((row) => row.code));
+
+      expect(codes).toContain('VA_BCA');
+      expect(codes).toContain('QRIS');
     });
   });
 

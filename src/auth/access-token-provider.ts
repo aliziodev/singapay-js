@@ -1,8 +1,7 @@
 import type { ResolvedConfig, ServiceHost } from '../config.js';
 import { sha256Hex } from '../crypto.js';
 import { AuthenticationError, ConnectionError } from '../errors.js';
-import { parseEnvelope, toApiError } from '../http/response.js';
-import { ResponseCode } from '../response-code.js';
+import { isIpRejection, parseEnvelope, toApiError } from '../http/response.js';
 import type { AccessTokenSigner } from './access-token-signer.js';
 import type { TokenProvider } from './token-provider.js';
 
@@ -101,10 +100,12 @@ export class AccessTokenProvider implements TokenProvider {
 
     if (!response.successful || typeof accessToken !== 'string' || accessToken === '') {
       // A server whose IP is not whitelisted never gets past the token
-      // exchange, so this is where SP017 actually surfaces in practice. The
-      // cause and the fix are nothing like a bad credential, so it keeps its
-      // own error class rather than being flattened into an auth failure.
-      if (response.code === ResponseCode.UnauthorizedIp) {
+      // exchange, so this is where the rejection actually surfaces in
+      // practice. The cause and the fix are nothing like a bad credential, so
+      // it keeps its own error class rather than being flattened into an auth
+      // failure. Note this host reports it without an SP code at all — see
+      // {@link isIpRejection}.
+      if (isIpRejection(response)) {
         throw toApiError(response);
       }
 

@@ -188,6 +188,53 @@ describe('AccessTokenProvider', () => {
       );
     });
 
+    it('surfaces the codeless IP rejection the token host actually sends', async () => {
+      // Sandbox 2026-08-23. The token host does not answer SP017 at all. The
+      // message below is verbatim from a live rejection (only the IP is
+      // masked); the envelope around it is this host's standard error shape,
+      // observed on a 422 from the same endpoint — `error.code` carries the
+      // HTTP status, which is not an SP code and so `parseEnvelope` drops it.
+      //
+      // Classification depends only on the status and the message, so it holds
+      // whichever envelope field carried the sentence. Matching on SP017 alone
+      // made this an AuthenticationError, sending people to audit credentials
+      // that were never wrong.
+      const net = gateway(
+        [
+          {
+            status: 403,
+            success: false,
+            error: { code: 403, message: 'Your IP address (203.0.113.10) is not registered' },
+          },
+        ],
+        403,
+      );
+
+      await expect(provider({ fetch: net.fetch }).token()).rejects.toBeInstanceOf(
+        IpNotWhitelistedError,
+      );
+    });
+
+    it('leaves the other HTTP 403 alone', async () => {
+      // The gateway's second 403 shape carries no code either, but it is a
+      // permission problem, not a network one. Widening the IP check to every
+      // 403 would swallow it.
+      const net = gateway(
+        [
+          {
+            status: 403,
+            success: false,
+            error: { code: 403, message: 'Access denied to this account.' },
+          },
+        ],
+        403,
+      );
+
+      await expect(provider({ fetch: net.fetch }).token()).rejects.not.toBeInstanceOf(
+        IpNotWhitelistedError,
+      );
+    });
+
     it('raises an authentication error when the exchange is refused', async () => {
       const net = gateway(
         [{ response_code: 'SP001', response_message: 'Invalid credential' }],

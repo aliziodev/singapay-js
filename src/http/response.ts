@@ -101,6 +101,38 @@ export function parseEnvelope(status: number, raw: unknown): SingaPayResponse {
 }
 
 /**
+ * Does this failure mean the caller's IP is not whitelisted?
+ *
+ * The gateway says so in two different ways. The documented one is `SP017`.
+ * The access-token host instead answers HTTP 403 with a plain sentence and an
+ * `error.code` holding the HTTP status — a number, which {@link parseEnvelope}
+ * drops on purpose because an HTTP status is not an SP code.
+ *
+ * The undocumented shape is the one a real deployment meets first: a server
+ * whose IP is not registered never gets past the token exchange, so it never
+ * reaches an endpoint that could answer `SP017` at all. Matching only the code
+ * left that case falling through to {@link AuthenticationError}, sending
+ * people to audit credentials that were never wrong.
+ *
+ * The message test is deliberately narrow. The other HTTP 403 the gateway
+ * returns — `Access denied to this account.` — must stay an
+ * {@link AccountCredentialRequiredError}, and it says nothing about an IP.
+ */
+export function isIpRejection(response: SingaPayResponse): boolean {
+  if (response.code === ResponseCode.UnauthorizedIp) {
+    return true;
+  }
+
+  if (response.status !== 403) {
+    return false;
+  }
+
+  const message = response.message.toLowerCase();
+
+  return message.includes('ip address') && message.includes('not registered');
+}
+
+/**
  * Map a failed response onto the most specific error class available.
  *
  * The specific classes exist for the codes a caller actually branches on:
@@ -115,9 +147,13 @@ export function toApiError(response: SingaPayResponse): ApiError {
     raw: response.raw,
   };
 
+  // Checked ahead of the switch because the shape that matters most carries
+  // no code to switch on.
+  if (isIpRejection(response)) {
+    return new IpNotWhitelistedError(context);
+  }
+
   switch (response.code) {
-    case ResponseCode.UnauthorizedIp:
-      return new IpNotWhitelistedError(context);
     case ResponseCode.InsufficientBalance:
       return new InsufficientBalanceError(context);
     case ResponseCode.DuplicateReferenceNumber:
