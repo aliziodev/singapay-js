@@ -65,6 +65,8 @@ Tanpa dependency runtime, jadi tidak ada apa pun yang ikut terpasang.
 
 Tidak ada paket terpisah untuk Next.js, Nuxt, Express, atau lainnya. Semuanya dilayani paket ini — lihat [resep webhook per framework](#resep-per-framework).
 
+> **Memakai AI coding assistant?** Arahkan ke [`llms.txt`](llms.txt) — ringkasan padat berisi jebakan integrasi yang tidak bisa ditebak dan gagal secara diam-diam kalau salah. Untuk agen yang mengerjakan repo ini sendiri, ada [`AGENTS.md`](AGENTS.md).
+
 ## Pakai
 
 ```ts

@@ -1,0 +1,125 @@
+# @aliziodev/singapay
+
+> Unofficial TypeScript SDK for the SingaPay payment gateway (Indonesia).
+> Framework-agnostic, server-only, zero runtime dependencies. Node 20+, Bun,
+> Deno, edge runtimes — all cryptography via Web Crypto.
+
+This file is a dense brief for AI agents writing integration code. It exists
+because several things below are **not guessable** and fail silently if got
+wrong. Full prose: [README.md](README.md). Working on the repo itself:
+[AGENTS.md](AGENTS.md).
+
+## Minimal use
+
+```ts
+import { SingaPay } from '@aliziodev/singapay';
+
+const singapay = new SingaPay({
+  environment: 'sandbox',                    // defaults to sandbox, never production
+  clientId: process.env.SINGAPAY_CLIENT_ID!,
+  clientSecret: process.env.SINGAPAY_CLIENT_SECRET!,
+  apiKey: process.env.SINGAPAY_API_KEY!,     // dashboard calls this the API Key
+  accountId: process.env.SINGAPAY_ACCOUNT_ID!,
+});
+
+const link = await singapay.paymentLinks.create({
+  reff_no: 'INV-1001',
+  payment_link_type: 'total',
+  total_amount: 150_000,
+});
+
+link.data.payment_url;
+```
+
+Endpoint groups: `paymentLinks` `paymentLinkHistories` `virtualAccounts`
+`vaTransactions` `qris` `ewallet` `card` `subscriptions` `directDebit`
+`disbursement` `ewalletMoneyOut` `qrisMoneyOut` `accountTransfer`
+`cardlessWithdrawal` `accounts` `balance` `statements`.
+
+## Things you will get wrong
+
+**`apiKey`, not `partnerId`.** The dashboard labels it *API Key*; the gateway
+receives it as the `X-PARTNER-ID` header. Swapping it with `clientSecret` is
+the most common setup mistake and fails as an unexplained auth error.
+
+**Lists are in `items`, not `data`.** `data` is always an object; every
+`list()`-style endpoint puts its rows in `items` (`null` for single records,
+`[]` for a genuinely empty list). Reading `data` on a listing returns `{}`.
+
+**Server-only, and enforced.** Every request is signed with the client secret.
+The package throws on import in a browser. Send only public artefacts to the
+client: `payment_url`, `qr_string`, `virtual_account_no`, `checkout_url`.
+
+**Money-out is off by default.** Every fund-moving call throws
+`MoneyOutDisabledError` until `moneyOut: { enabled: true }`.
+
+**Never retry money-out.** `SP001`/`SP005` arrive as
+`IndeterminateOutcomeError` and mean the outcome is *unknown*, not failed. Call
+`inquireStatus()` with the same reference number. A blind retry duplicates a
+real transfer.
+
+**On the card product, `SP001` is overloaded** — it also means malformed
+`card_expiry` and daily-quota-exceeded, both definite refusals. Read the
+message before treating it as ambiguous.
+
+**Transfer and its pre-flight checks use different field names:**
+
+| Call | Bank field | Account field |
+|---|---|---|
+| `disbursement.transfer()` | `bank_code` (3 digits or SWIFT) | `bank_account_number` |
+| `checkFee()` `checkBeneficiary()` | `bank_swift_code` (SWIFT only) | `bank_account_number` |
+
+**Amounts come back inconsistently typed** across events — `"125000.00"` from a
+VA, `55000` from an e-wallet. Always funnel through `Amount.from()`. Outbound
+amounts must be integers; floats are refused before signing.
+
+**`card_expiry` is YYMM**, not MMYY. December 2030 is `3012`.
+
+**The gateway silently drops unknown fields.** A misspelled key is not an
+error — the call succeeds and the field is simply absent from the result.
+Assert what you sent came back, not merely that the call succeeded.
+
+## Webhooks
+
+```ts
+import { readWebhookBody } from '@aliziodev/singapay';
+
+const verified = await singapay.verifyWebhook(
+  await readWebhookBody(request),   // web Request, Node req, or an h3 event
+  request.headers,
+  '/api/webhooks/singapay',         // exactly as registered, query string included
+);
+```
+
+**Verification tries every configured connection's secret.** One callback URL
+receives deliveries signed by *different* credentials — money-out and the
+expiry sweep come from the merchant Default credential even when a Specific one
+made the call. Declare the other credentials under `connections` or those
+deliveries 401 silently.
+
+**A permission refusal has two shapes** and only one carries a code:
+`403 SP403 "This account requires its own credential…"` and
+`403 (no code) "Access denied to this account."` Branch on
+`error.status === 403`, not on the code.
+
+**Payload shapes differ per event.** `transaction-expiration` is a *batch* of
+three arrays, not one transaction, and never sweeps e-wallet.
+`payment_method_additional` is a JSON **string** on `payment-link-inquiry` but
+`payment.additional_info` is an **object** on `ewallet-native-transaction`.
+
+**A paid payment link never says how it was paid** — `data.payment.method` is
+always the literal `payment_link`. The real channel is in the earlier
+`payment-link-inquiry` delivery; join on `reff_no`.
+
+## Deployment
+
+SingaPay rejects unregistered IPs with `SP017`. **Vercel, Netlify and
+Cloudflare Workers use dynamic egress IPs and cannot be whitelisted.** Call
+from a static-IP host, or route through a static-IP proxy that forwards path,
+headers and body **byte for byte** — a re-serialized body breaks the signature.
+
+Errors: `IpNotWhitelistedError` `IndeterminateOutcomeError`
+`InsufficientBalanceError` `DuplicateReferenceError`
+`AccountCredentialRequiredError` `MoneyOutDisabledError`
+`WebhookVerificationError` `AuthenticationError` `ConnectionError` `ApiError` —
+all extend `SingaPayError`.
