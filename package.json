@@ -25,7 +25,10 @@
   "engines": {
     "node": ">=20"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/browser-guard.mjs",
+    "./dist/browser-guard.cjs"
+  ],
   "files": [
     "dist",
     "llms.txt"
