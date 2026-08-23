@@ -11,6 +11,10 @@ SingaPay tidak menyediakan SDK resmi untuk bahasa apa pun. Setiap integrator har
 
 Satu paket, framework-agnostic, tanpa dependency runtime. Berjalan di Node 20+, Bun, Deno, dan edge runtime — seluruh kriptografi memakai Web Crypto API (`crypto.subtle`).
 
+> 🤖 **Memakai AI coding assistant?** Arahkan ke **[`llms.txt`](llms.txt)** — ringkasan padat berisi hal-hal yang tidak bisa ditebak dan **gagal secara diam-diam** kalau salah: `apiKey` bukan `partnerId`, baris daftar ada di `items` bukan `data`, dua kosakata field yang berbeda antara transfer dan pengecekannya, dan verifier webhook yang butuh secret **semua** kredensial. Ikut terpasang bersama paket, jadi bisa dibaca dari `node_modules/@aliziodev/singapay/llms.txt`.
+>
+> Untuk agen yang mengerjakan repo ini sendiri: [`AGENTS.md`](AGENTS.md).
+
 - [Instalasi](#instalasi)
 - [Pakai](#pakai)
 - [⚠️ Baca dulu sebelum produksi](#baca-dulu-sebelum-produksi)
@@ -64,8 +68,6 @@ deno add npm:@aliziodev/singapay
 Tanpa dependency runtime, jadi tidak ada apa pun yang ikut terpasang.
 
 Tidak ada paket terpisah untuk Next.js, Nuxt, Express, atau lainnya. Semuanya dilayani paket ini — lihat [resep webhook per framework](#resep-per-framework).
-
-> **Memakai AI coding assistant?** Arahkan ke [`llms.txt`](llms.txt) — ringkasan padat berisi jebakan integrasi yang tidak bisa ditebak dan gagal secara diam-diam kalau salah. Untuk agen yang mengerjakan repo ini sendiri, ada [`AGENTS.md`](AGENTS.md).
 
 ## Pakai
 
