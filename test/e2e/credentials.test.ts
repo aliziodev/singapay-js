@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { SingaPay } from '../../src/index.js';
+import { ApiError } from '../../src/index.js';
 import {
   accountId,
   hasCredentials,
@@ -62,13 +63,26 @@ describe.skipIf(!hasCredentials || !hasMerchantConnection)('both credentials', (
 
       expect(owner.successful).toBe(true);
 
-      // The merchant-wide credential either serves this account too (it is
-      // unassigned, so it falls back) or refuses it with exactly SP403.
-      // Any other code means something changed that is not documented.
-      const other = await merchant.balance.account(accountId ?? undefined);
+      // The merchant-wide credential either serves this account too — it does
+      // while the account is unassigned — or refuses it once the account is
+      // assigned to a Specific credential in the dashboard.
+      //
+      // The refusal comes in TWO shapes, and only one carries an SP code:
+      //
+      //   403 SP403  "This account requires its own credential..."
+      //   403 (none) "Access denied to this account."
+      //
+      // Both were seen on this same account hours apart, the second appearing
+      // after it was assigned in the dashboard. An application branching on
+      // `code === 'SP403'` silently misses the second and reads a permission
+      // refusal as an unexplained failure. Branch on the status.
+      try {
+        const other = await merchant.balance.account(accountId ?? undefined);
 
-      if (!other.successful) {
-        expect(other.code).toBe('SP403');
+        expect(other.successful).toBe(true);
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(403);
       }
     },
   );

@@ -508,7 +508,7 @@ Semua turunan `SingaPayError`:
 | `IndeterminateOutcomeError` | SP001 / SP005 — hasil tidak diketahui, wajib `inquireStatus()`. **Di endpoint kartu, SP001 juga dipakai untuk penolakan pasti** (`card_expiry` salah format, kuota harian habis) — baca pesannya sebelum memperlakukannya sebagai hasil ambigu |
 | `InsufficientBalanceError` | SP003 |
 | `DuplicateReferenceError` | SP004 |
-| `AccountCredentialRequiredError` | SP403 — panggil dengan kredensial pemilik akun |
+| `AccountCredentialRequiredError` | SP403 — panggil dengan kredensial pemilik akun. **Perhatikan: penolakan kredensial punya dua bentuk**, dan hanya satu membawa kode SP — yang lain `403` polos dengan pesan *"Access denied to this account."* dan `code: null`, muncul sebagai `ApiError`. Bercabanglah pada `error.status === 403`, bukan pada kodenya |
 | `MoneyOutDisabledError` | Guard money-out masih mati |
 | `WebhookVerificationError` | Header kurang, timestamp basi, body kosong, atau tanda tangan tidak cocok |
 | `AuthenticationError` | Token exchange ditolak |
